@@ -1,0 +1,173 @@
+import asyncio
+import json
+import os
+import socket
+from dotenv import load_dotenv
+from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka import Consumer, KafkaException, KafkaError
+import sys
+
+from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST
+from srt.ai_handler import run_ai_handler
+
+load_dotenv()
+KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
+KAFKA_TOPIC_CONSUMER = os.getenv('KAFKA_TOPIC_CONSUMER')
+KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA = os.getenv('KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA')
+KAFKA_TOPIC_PRODUCER_FOR_SENDING = os.getenv('KAFKA_TOPIC_PRODUCER_FOR_SENDING')
+
+admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})\
+
+producer = None # ниже будет переопределён
+consumer_auth = None # ниже будет переопределён
+
+
+def create_topic(topic_name, num_partitions=1, replication_factor=1):
+    """
+    Создаёт топик в Kafka.
+
+    :param topic_name: Название топика
+    :param num_partitions: Количество партиций
+    :param replication_factor: Фактор репликации
+    """
+    # Создание объекта топика
+    new_topic = NewTopic(
+        topic_name,
+        num_partitions=num_partitions,
+        replication_factor=replication_factor
+    )
+
+    # Запрос на создание топика
+    futures = admin_client.create_topics([new_topic])
+
+    # Ожидание результата
+    for topic, future in futures.items():
+        try:
+            future.result()  # Блокирует выполнение, пока топик не создан
+            logger.info(f"Топик '{topic}' успешно создан!")
+        except Exception as e:
+            logger.error(f"Ошибка при создании топика '{topic}': {e}")
+
+
+def check_exists_topic(topic_names: list):
+    """Проверяет, существует ли топик, если нет, то создаст его"""
+    for topic in topic_names:
+        cluster_metadata = admin_client.list_topics()
+        if not topic in cluster_metadata.topics: # если topic не существует
+            create_topic(
+                topic_name=topic,
+                num_partitions=1,
+                replication_factor=1
+            )
+
+class ProducerKafka:
+    def __init__(self):
+        self.conf = {
+                'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+                'client.id': socket.gethostname()
+            }
+        self.producer = Producer(self.conf)
+
+    def sent_message(self, topic: str, key: str, value: dict):
+        try:
+            self.producer.produce(topic=topic, key=key, value=json.dumps(value).encode('utf-8'), callback=self._acked)
+            self.producer.flush()
+            self.producer.poll(1)
+        except KafkaException as e:
+            logger.error(f"Kafka error: {e}")
+
+    def _acked(self, err, msg):
+        logger.info(f"Kafka new message: err: {err}\nmsg: {msg.value().decode('utf-8')}")
+
+
+
+class ConsumerKafka:
+    def __init__(self, topic: str):
+        self.conf = {'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+                'group.id': 'foo',
+                'auto.offset.reset': 'smallest',
+                'enable.auto.commit': False,  # отключаем auto-commit
+                'on_commit': self.commit_completed} # тут указали в какую функцию попадёт при сохранении
+        self.consumer = Consumer(self.conf)
+        self.running = True
+        self.topic = topic
+        check_exists_topic([self.topic])
+
+    # в эту функцию попадём при вызове метода consumer.commit
+    def commit_completed(self, err, partitions):
+        if err:
+            logger.error(str(err))
+        else:
+            logger.info("сохранили партию kafka")
+
+    # ЭТУ ФУНКЦИЮ ПЕРЕОБРЕДЕЛЯЕМ В НАСТЛЕДУЕМОМ КЛАССЕ,
+    # ОНА БУДЕТ ВЫПОЛНЯТЬ ДЕЙСТВИЯ ПРИ ПОЛУЧЕНИИ СООБЩЕНИЯ
+    async def worker_topic(self, data:dict, key: str):
+        pass
+
+    async def _run_consumer(self):
+        self.consumer.subscribe([self.topic])
+        msg_count = 0
+
+        while self.running:
+            msg = self.consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+
+            if msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
+                                   (msg.topic(), msg.partition(), msg.offset()))
+                elif msg.error():
+                    raise KafkaException(msg.error())
+            else:
+                data = json.loads(msg.value().decode('utf-8'))
+                key = msg.key().decode('utf-8')
+
+                await self.worker_topic(data, key)
+
+                msg_count += 1
+                if msg_count % MIN_COMMIT_COUNT_KAFKA == 0:
+                    self.consumer.commit(asynchronous=True)
+
+    def consumer_run(self):
+        """Создаёт цикл и запускает асинхронный код для чтения сообщений"""
+        try:
+            loop = asyncio.new_event_loop() # Создаём новый цикл
+            asyncio.set_event_loop(loop)  # Назначаем его для текущего потока
+            loop.run_until_complete(self._run_consumer()) # Запускаем асинхронный код
+        finally:
+            self.consumer.close()
+
+# consumer для получения данные о новых запросах
+class ConsumerKafkaAIHandler(ConsumerKafka):
+    def __init__(self, topic: str):
+        super().__init__(topic)
+
+    async def worker_topic(self, data: dict, key: str):
+        if key == KEY_NEW_REQUEST: # при поступлении нового пользователя
+            response_ai = await run_ai_handler(data['requirements'], data['resume'])
+            response_ai['response'].update({
+                "user_id": data['user_id'],
+                "requirements_id": data['requirements_id'],
+                "resume_id": data['resume_id']
+            })
+
+            producer.sent_message(
+                topic=KAFKA_TOPIC_PRODUCER_FOR_SENDING,
+                key='new_sending',
+                value=response_ai
+            )
+            if response_ai['success']: # если запрос успешно обработан
+                producer.sent_message(
+                    topic=KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA,
+                    key='new_processing',
+                    value=response_ai
+                )
+
+
+producer = ProducerKafka()
+consumer_ai_handler = ConsumerKafkaAIHandler(KAFKA_TOPIC_CONSUMER)
+
+
