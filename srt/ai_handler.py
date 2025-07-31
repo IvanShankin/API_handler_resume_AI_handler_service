@@ -1,5 +1,4 @@
 import os
-import asyncio
 import json
 import openai
 import tiktoken
@@ -109,6 +108,7 @@ async def run_ai_handler(requirements: str, resume: str)-> dict:
         "wait_seconds": int, # опционально, если есть rate limit
     }
     """
+    global current_tokens_minute
     prompt = """
 Ты — AI-рекрутер. Твоя задача — строго и объективно оценить соответствие кандидата требованиям вакансии.
 
@@ -178,6 +178,8 @@ async def run_ai_handler(requirements: str, resume: str)-> dict:
             "message_error": e,
             "wait_seconds": 0,
         }
+
+    current_tokens_minute += len(response['choices'][0]['message']['content'])
 
     # очищаем ответ от маркеров ```json
     cleaned_response = response['choices'][0]['message']['content'].replace('```json', '').replace('```', '').strip()

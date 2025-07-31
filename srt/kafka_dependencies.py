@@ -8,14 +8,14 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import sys
 
-from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST
+from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_SENDING
 from srt.ai_handler import run_ai_handler
 
 load_dotenv()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
-KAFKA_TOPIC_CONSUMER = os.getenv('KAFKA_TOPIC_CONSUMER')
-KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA = os.getenv('KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA')
-KAFKA_TOPIC_PRODUCER_FOR_SENDING = os.getenv('KAFKA_TOPIC_PRODUCER_FOR_SENDING')
+KAFKA_TOPIC_FOR_AI_HANDLER = os.getenv('KAFKA_TOPIC_FOR_AI_HANDLER')
+KAFKA_TOPIC_FOR_UPLOADING_DATA = os.getenv('KAFKA_TOPIC_FOR_UPLOADING_DATA')
+KAFKA_TOPIC_FOR_SENDING = os.getenv('KAFKA_TOPIC_FOR_SENDING')
 
 admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})\
 
@@ -84,15 +84,18 @@ class ProducerKafka:
 
 class ConsumerKafka:
     def __init__(self, topic: str):
-        self.conf = {'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-                'group.id': 'foo',
-                'auto.offset.reset': 'smallest',
-                'enable.auto.commit': False,  # отключаем auto-commit
-                'on_commit': self.commit_completed} # тут указали в какую функцию попадёт при сохранении
+        self.conf = {
+            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+            'group.id': 'foo',
+            'auto.offset.reset': 'smallest',
+            'enable.auto.commit': False,  # отключаем auto-commit
+            'on_commit': self.commit_completed
+        } # тут указали в какую функцию попадёт при сохранении
         self.consumer = Consumer(self.conf)
         self.running = True
         self.topic = topic
         check_exists_topic([self.topic])
+
 
     # в эту функцию попадём при вызове метода consumer.commit
     def commit_completed(self, err, partitions):
@@ -100,6 +103,13 @@ class ConsumerKafka:
             logger.error(str(err))
         else:
             logger.info("сохранили партию kafka")
+
+    async def set_running(self, running: bool):
+        self.running = running
+
+    async def subscribe_topics(self, topics: list):
+        self.consumer.subscribe([topics])
+        self.consumer.poll(0)  # форсирует загрузку метаданных
 
     # ЭТУ ФУНКЦИЮ ПЕРЕОБРЕДЕЛЯЕМ В НАСТЛЕДУЕМОМ КЛАССЕ,
     # ОНА БУДЕТ ВЫПОЛНЯТЬ ДЕЙСТВИЯ ПРИ ПОЛУЧЕНИИ СООБЩЕНИЯ
@@ -155,19 +165,19 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
             })
 
             producer.sent_message(
-                topic=KAFKA_TOPIC_PRODUCER_FOR_SENDING,
-                key='new_sending',
+                topic=KAFKA_TOPIC_FOR_SENDING,
+                key=KEY_NEW_SENDING,
                 value=response_ai
             )
             if response_ai['success']: # если запрос успешно обработан
                 producer.sent_message(
-                    topic=KAFKA_TOPIC_PRODUCER_FOR_UPLOADING_DATA,
-                    key='new_processing',
-                    value=response_ai
+                    topic=KAFKA_TOPIC_FOR_UPLOADING_DATA,
+                    key=KEY_NEW_PROCESSING,
+                    value=response_ai['response']
                 )
 
 
 producer = ProducerKafka()
-consumer_ai_handler = ConsumerKafkaAIHandler(KAFKA_TOPIC_CONSUMER)
+consumer_ai_handler = ConsumerKafkaAIHandler(KAFKA_TOPIC_FOR_AI_HANDLER)
 
 

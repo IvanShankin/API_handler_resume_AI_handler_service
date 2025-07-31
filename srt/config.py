@@ -12,9 +12,12 @@ TPM = 40000 # в минуту
 
 MIN_COMMIT_COUNT_KAFKA = 5
 
-# данные для ключей Kafka
+# данные для ключей Kafka (CONSUMER)
 KEY_NEW_REQUEST = 'new_request'
 
+# данные для ключей Kafka (PRODUCER)
+KEY_NEW_SENDING = 'new_sending'
+KEY_NEW_PROCESSING= 'new_processing'
 
 LOG_DIR = Path("../logs")
 LOG_DIR.mkdir(exist_ok=True)
