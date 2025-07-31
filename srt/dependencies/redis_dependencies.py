@@ -7,15 +7,18 @@ REDIS_HOST = os.getenv('REDIS_HOST')
 REDIS_PORT = int(os.getenv('REDIS_PORT'))
 
 
-redis_client = Redis(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    db=0,
-    decode_responses=True  # Автоматическое декодирование из bytes в str
-)
 
-async def get_redis():
-    try:
-        yield redis_client
-    finally:
-        await redis_client.aclose()
+class RedisWrapper:
+    def __init__(self):
+        self.redis = Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=0,
+            decode_responses=True # автоматически преобразование с байт в строку
+        )
+
+    async def __aenter__(self):
+        return self.redis
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.redis.aclose()

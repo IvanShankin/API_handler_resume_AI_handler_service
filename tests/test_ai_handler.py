@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pytest
 
@@ -5,6 +6,7 @@ from confluent_kafka import KafkaError
 
 from srt.config import KEY_NEW_SENDING, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
 from srt.dependencies.kafka_dependencies import producer
+from srt.dependencies.redis_dependencies import RedisWrapper
 from tests.conftest import (
     consumer, KAFKA_TOPIC_FOR_UPLOADING_DATA, KAFKA_TOPIC_FOR_AI_HANDLER,
     KAFKA_TOPIC_FOR_SENDING, RESUME_BY_20_POINT,
@@ -15,29 +17,34 @@ from tests.conftest import (
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'resume, min_score, max_score',
+    'processing_id, resume, min_score, max_score',
     [
-        (RESUME_BY_20_POINT, 0, 40),
-        (RESUME_BY_60_POINT, 40, 80),
-        (RESUME_BY_100_POINT, 80, 100),
+        (1, RESUME_BY_20_POINT, 0, 40),
+        (2, RESUME_BY_60_POINT, 40, 80),
+        (3, RESUME_BY_100_POINT, 80, 100),
     ]
 
 )
-async def test_success(resume, min_score, max_score, clearing_kafka):
+async def test_success(processing_id, resume, min_score, max_score, clearing_kafka):
+    async with RedisWrapper() as redis: # очистка redis
+        await redis.flushdb()
 
     producer.sent_message(
         topic=KAFKA_TOPIC_FOR_AI_HANDLER,
         key=KEY_NEW_REQUEST,
         value={
-            'user_id': 1,
-            'resume_id': 2,
-            'requirements_id': 3,
+            'processing_id': processing_id,
+            'user_id': 2,
+            'resume_id': 3,
+            'requirements_id': 4,
             'requirements': REQUIREMENTS,
             'resume': resume
         }
     )
 
     consumer.subscribe([KAFKA_TOPIC_FOR_SENDING, KAFKA_TOPIC_FOR_UPLOADING_DATA])
+
+    await asyncio.sleep(5) # даём время на обработку
 
     # Данные с Kafka
     data_kafka_new_sending = None
@@ -62,6 +69,10 @@ async def test_success(resume, min_score, max_score, clearing_kafka):
         except KafkaError as e:
             raise Exception(f"Ошибка Kafka: {e}")
 
+    async with RedisWrapper() as redis:
+        result_redis = await redis.get(f'processed_messages:{processing_id}')
+        assert result_redis
+
     # Проверка данных в Kafka
     # Проверяем сообщение из топика KAFKA_TOPIC_FOR_SENDING
     assert data_kafka_new_sending is not None, "Не получено сообщение из топика KAFKA_TOPIC_FOR_SENDING"
@@ -71,9 +82,10 @@ async def test_success(resume, min_score, max_score, clearing_kafka):
     assert min_score <= data_kafka_new_sending['response']['score'] <= max_score  # проверка на соответствие баллов
 
     response = data_kafka_new_sending['response']
-    assert response['user_id'] == 1, "Неверный user_id"
-    assert response['resume_id'] == 2, "Неверный resume_id"
-    assert response['requirements_id'] == 3, "Неверный requirements_id"
+    assert response['processing_id'] == processing_id, "Неверный processing_id"
+    assert response['user_id'] == 2, "Неверный user_id"
+    assert response['resume_id'] == 3, "Неверный resume_id"
+    assert response['requirements_id'] == 4, "Неверный requirements_id"
     assert isinstance(response['score'], int), "Score должен быть целым числом"
     assert min_score <= response['score'] <= max_score, f"Score должен быть в диапазоне {min_score}-{max_score}"
     assert isinstance(response['matches'], list), "Matches должен быть списком"
@@ -82,9 +94,10 @@ async def test_success(resume, min_score, max_score, clearing_kafka):
 
     # Проверяем сообщение из топика KAFKA_TOPIC_FOR_UPLOADING_DATA (должно быть только при успешной обработке)
     assert data_kafka_new_processing is not None, "Не получено сообщение из топика KAFKA_TOPIC_FOR_UPLOADING_DATA"
-    assert data_kafka_new_processing['user_id'] == 1, "Неверный user_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
-    assert data_kafka_new_processing['resume_id'] == 2, "Неверный resume_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
-    assert data_kafka_new_processing['requirements_id'] == 3, "Неверный requirements_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
+    assert data_kafka_new_processing['processing_id'] == processing_id, "Неверный processing_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
+    assert data_kafka_new_processing['user_id'] == 2, "Неверный user_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
+    assert data_kafka_new_processing['resume_id'] == 3, "Неверный resume_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
+    assert data_kafka_new_processing['requirements_id'] == 4, "Неверный requirements_id в KAFKA_TOPIC_FOR_UPLOADING_DATA"
     assert data_kafka_new_processing['score'] == response['score'], "Score в KAFKA_TOPIC_FOR_UPLOADING_DATA должен совпадать с sending"
     assert data_kafka_new_processing['matches'] == response['matches'], "Matches в KAFKA_TOPIC_FOR_UPLOADING_DATA должен совпадать с sending"
     assert data_kafka_new_processing['recommendation'] == response['recommendation'], "Recommendation в KAFKA_TOPIC_FOR_UPLOADING_DATA должен совпадать с sending"

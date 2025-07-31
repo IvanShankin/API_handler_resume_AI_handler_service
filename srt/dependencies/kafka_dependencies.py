@@ -8,8 +8,10 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import sys
 
-from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_SENDING
+from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_SENDING, \
+    STORAGE_TIME_PROCESSED_MESSAGES
 from srt.ai_handler import run_ai_handler
+from srt.dependencies.redis_dependencies import RedisWrapper
 
 load_dotenv()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
@@ -121,6 +123,7 @@ class ConsumerKafka:
         msg_count = 0
 
         while self.running:
+            print("читаем топик")
             msg = self.consumer.poll(timeout=1.0)
             if msg is None:
                 continue
@@ -135,6 +138,7 @@ class ConsumerKafka:
                 data = json.loads(msg.value().decode('utf-8'))
                 key = msg.key().decode('utf-8')
 
+                print("\n\n\nЗапустили метод\n\n\n")
                 await self.worker_topic(data, key)
 
                 msg_count += 1
@@ -157,25 +161,36 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
 
     async def worker_topic(self, data: dict, key: str):
         if key == KEY_NEW_REQUEST: # при поступлении нового запроса
-            redis_client
-            response_ai = await run_ai_handler(data['requirements'], data['resume'])
-            response_ai['response'].update({
-                "user_id": data['user_id'],
-                "requirements_id": data['requirements_id'],
-                "resume_id": data['resume_id']
-            })
+            async with RedisWrapper() as redis:
+                redis_result = await redis.get(f'processed_messages:{data['processing_id']}')
+                if redis_result is not None:
+                    logger.info(f"Сообщение от kafka на обработку с processing_id = {data['processing_id']} будет пропущено,"
+                                f"т.к. Было ранее обработано")
+                    # в этом случае ничего возвращать не надо, ибо уже обработали этот запрос
+                    return
 
-            producer.sent_message(
-                topic=KAFKA_TOPIC_FOR_SENDING,
-                key=KEY_NEW_SENDING,
-                value=response_ai
-            )
-            if response_ai['success']: # если запрос успешно обработан
+
+                response_ai = await run_ai_handler(data['requirements'], data['resume'])
+                response_ai['response'].update({
+                    "processing_id": data['processing_id'],
+                    "user_id": data['user_id'],
+                    "requirements_id": data['requirements_id'],
+                    "resume_id": data['resume_id']
+                })
+                # сохраняем в redis (значение может быть любое)
+                await redis.setex(f'processed_messages:{data['processing_id']}', STORAGE_TIME_PROCESSED_MESSAGES, '_')
+
                 producer.sent_message(
-                    topic=KAFKA_TOPIC_FOR_UPLOADING_DATA,
-                    key=KEY_NEW_PROCESSING,
-                    value=response_ai['response']
+                    topic=KAFKA_TOPIC_FOR_SENDING,
+                    key=KEY_NEW_SENDING,
+                    value=response_ai
                 )
+                if response_ai['success']: # если запрос успешно обработан
+                    producer.sent_message(
+                        topic=KAFKA_TOPIC_FOR_UPLOADING_DATA,
+                        key=KEY_NEW_PROCESSING,
+                        value=response_ai['response']
+                    )
 
 
 producer = ProducerKafka()
