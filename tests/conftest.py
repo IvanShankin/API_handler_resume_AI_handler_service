@@ -11,11 +11,11 @@ KAFKA_TOPIC_FOR_SENDING=os.getenv('KAFKA_TOPIC_FOR_SENDING')
 
 # этот импорт необходимо указывать именно тут для корректного импорта .tests.env
 import pytest_asyncio
-from confluent_kafka.cimpl import NewTopic, Producer, TopicPartition
+from confluent_kafka.cimpl import NewTopic, TopicPartition
 from confluent_kafka import Consumer
 
 from srt.config import logger
-from srt.kafka_dependencies import admin_client, consumer_ai_handler
+from srt.dependencies.kafka_dependencies import admin_client, consumer_ai_handler
 
 REQUIREMENTS ="""
 Должность: Middle Python Backend Developer

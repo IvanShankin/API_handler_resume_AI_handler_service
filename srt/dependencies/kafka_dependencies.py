@@ -156,7 +156,8 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
         super().__init__(topic)
 
     async def worker_topic(self, data: dict, key: str):
-        if key == KEY_NEW_REQUEST: # при поступлении нового пользователя
+        if key == KEY_NEW_REQUEST: # при поступлении нового запроса
+            redis_client
             response_ai = await run_ai_handler(data['requirements'], data['resume'])
             response_ai['response'].update({
                 "user_id": data['user_id'],
