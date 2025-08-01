@@ -172,11 +172,12 @@ async def run_ai_handler(requirements: str, resume: str)-> dict:
             "wait_seconds": 20, # в ошибке всегда просят подождать 20 секунд
         }
     except Exception as e:
+        logger.error(f'Неожиданная ошибка при запросе к OpenAI: {str(e)}')  # логируем
         return {
             "success": False,
             "response": None,
-            "message_error": e,
-            "wait_seconds": 0,
+            "message_error": 'Произошла внутренняя ошибка',
+            "wait_seconds": None,
         }
 
     current_tokens_minute += len(response['choices'][0]['message']['content'])

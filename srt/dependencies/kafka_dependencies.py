@@ -123,7 +123,6 @@ class ConsumerKafka:
         msg_count = 0
 
         while self.running:
-            print("читаем топик")
             msg = self.consumer.poll(timeout=1.0)
             if msg is None:
                 continue
@@ -138,7 +137,6 @@ class ConsumerKafka:
                 data = json.loads(msg.value().decode('utf-8'))
                 key = msg.key().decode('utf-8')
 
-                print("\n\n\nЗапустили метод\n\n\n")
                 await self.worker_topic(data, key)
 
                 msg_count += 1
@@ -191,6 +189,8 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
                         key=KEY_NEW_PROCESSING,
                         value=response_ai['response']
                     )
+                else:
+                    logger.info(f'Обработка {data['processing_id']} завершилась с ошибкой и данные не будут направленны через топик KAFKA_TOPIC_FOR_UPLOADING_DATA')
 
 
 producer = ProducerKafka()

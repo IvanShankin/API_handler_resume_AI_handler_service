@@ -8,8 +8,10 @@ services:
     environment:
       - OPENAI_KEY=${OPENAI_KEY}
 
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT}
 
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
       - KAFKA_TOPIC_FOR_UPLOADING_DATA=${KAFKA_TOPIC_FOR_UPLOADING_DATA}
       - KAFKA_TOPIC_FOR_AI_HANDLER=${KAFKA_TOPIC_FOR_AI_HANDLER}
       - KAFKA_TOPIC_FOR_SENDING=${KAFKA_TOPIC_FOR_SENDING}
@@ -19,6 +21,17 @@ services:
       kafka:
         condition: service_started
     restart: unless-stopped  # Автоперезапуск при падении
+
+  redis:
+    image: redis:7
+    command: redis-server --save 60 1 --loglevel warning  # Настройки Redis
+    volumes:
+      - redis_data:/data  # Сохраняем данные Redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   zookeeper:
     image: bitnami/zookeeper:3.9

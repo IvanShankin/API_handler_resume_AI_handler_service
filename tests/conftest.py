@@ -5,6 +5,7 @@ import time
 from redis import Redis
 from dotenv import load_dotenv
 
+from srt.dependencies.redis_dependencies import RedisWrapper
 
 load_dotenv()  # Загружает переменные из .env
 KAFKA_BOOTSTRAP_SERVERS=os.getenv('KAFKA_BOOTSTRAP_SERVERS')
@@ -159,21 +160,11 @@ async def check_kafka_connection(_session_scoped_runner):
     except Exception:
         raise Exception("Не удалось установить соединение с Kafka!")
 
-# @pytest_asyncio.fixture(scope='function')
-# async def redis_session()->Redis:
-#     """Соединение с redis"""
-#     redis_gen = get_redis()
-#     session = await redis_gen.__anext__()
-#     try:
-#         yield session
-#     finally:
-#         await session.aclose()
-#         await asyncio.sleep(1)
-
 @pytest_asyncio.fixture(scope="function")
-async def clearing_redis(redis_session):
+async def clearing_redis():
     """Очищает redis"""
-    await redis_session.flushdb()
+    async with RedisWrapper() as redis:  # очистка redis
+        await redis.flushdb()
 
 @pytest_asyncio.fixture(scope='function')
 async def clearing_kafka():
