@@ -11,7 +11,7 @@ load_dotenv()  # Загружает переменные из .env
 KAFKA_BOOTSTRAP_SERVERS=os.getenv('KAFKA_BOOTSTRAP_SERVERS')
 KAFKA_TOPIC_FOR_UPLOADING_DATA=os.getenv('KAFKA_TOPIC_FOR_UPLOADING_DATA')
 KAFKA_TOPIC_FOR_AI_HANDLER=os.getenv('KAFKA_TOPIC_FOR_AI_HANDLER')
-KAFKA_TOPIC_FOR_SENDING=os.getenv('KAFKA_TOPIC_FOR_SENDING')
+KAFKA_TOPIC_FOR_NOTIFICATIONS=os.getenv('KAFKA_TOPIC_FOR_NOTIFICATIONS')
 
 # этот импорт необходимо указывать именно тут для корректного импорта .tests.env
 import pytest_asyncio
@@ -132,7 +132,7 @@ MSc in Software Engineering, МФТИ, 2012-2014
 TOPIC_LIST = [
     KAFKA_TOPIC_FOR_UPLOADING_DATA,
     KAFKA_TOPIC_FOR_AI_HANDLER,
-    KAFKA_TOPIC_FOR_SENDING
+    KAFKA_TOPIC_FOR_NOTIFICATIONS
 ]
 
 conf = {
@@ -159,12 +159,6 @@ async def check_kafka_connection(_session_scoped_runner):
         admin_client.list_topics(timeout=10)
     except Exception:
         raise Exception("Не удалось установить соединение с Kafka!")
-
-@pytest_asyncio.fixture(scope="function")
-async def clearing_redis():
-    """Очищает redis"""
-    async with RedisWrapper() as redis:  # очистка redis
-        await redis.flushdb()
 
 @pytest_asyncio.fixture(scope='function')
 async def clearing_kafka():

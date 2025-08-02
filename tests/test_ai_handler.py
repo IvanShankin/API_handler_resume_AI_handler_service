@@ -4,12 +4,12 @@ import pytest
 
 from confluent_kafka import KafkaError
 
-from srt.config import KEY_NEW_SENDING, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
+from srt.config import KEY_NEW_NOTIFICATIONS, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
 from srt.dependencies.kafka_dependencies import producer
 from srt.dependencies.redis_dependencies import RedisWrapper
 from tests.conftest import (
     consumer, KAFKA_TOPIC_FOR_UPLOADING_DATA, KAFKA_TOPIC_FOR_AI_HANDLER,
-    KAFKA_TOPIC_FOR_SENDING, RESUME_BY_20_POINT,
+    KAFKA_TOPIC_FOR_NOTIFICATIONS, RESUME_BY_20_POINT,
     RESUME_BY_60_POINT,  RESUME_BY_100_POINT, REQUIREMENTS
 )
 
@@ -33,6 +33,7 @@ async def test_success(processing_id, resume, min_score, max_score, clearing_kaf
         topic=KAFKA_TOPIC_FOR_AI_HANDLER,
         key=KEY_NEW_REQUEST,
         value={
+            'callback_url': 'https://test_url/',
             'processing_id': processing_id,
             'user_id': 2,
             'resume_id': 3,
@@ -42,7 +43,7 @@ async def test_success(processing_id, resume, min_score, max_score, clearing_kaf
         }
     )
 
-    consumer.subscribe([KAFKA_TOPIC_FOR_SENDING, KAFKA_TOPIC_FOR_UPLOADING_DATA])
+    consumer.subscribe([KAFKA_TOPIC_FOR_NOTIFICATIONS, KAFKA_TOPIC_FOR_UPLOADING_DATA])
 
     await asyncio.sleep(5) # даём время на обработку
 
@@ -56,12 +57,12 @@ async def test_success(processing_id, resume, min_score, max_score, clearing_kaf
                 if i == 39:
                     raise Exception("Не удалось получить сообщение от Kafka!")
                 continue
-            if msg.key().decode('utf-8') == KEY_NEW_SENDING:
+            if msg.key().decode('utf-8') == KEY_NEW_NOTIFICATIONS:
                 data_kafka_new_sending = json.loads(msg.value().decode('utf-8'))
             elif msg.key().decode('utf-8') == KEY_NEW_PROCESSING:
                 data_kafka_new_processing = json.loads(msg.value().decode('utf-8'))
             else:
-                raise Exception(f"Ожидался ключ {KEY_NEW_PROCESSING} или {KEY_NEW_SENDING}, получен {msg.key().decode('utf-8')}")
+                raise Exception(f"Ожидался ключ {KEY_NEW_PROCESSING} или {KEY_NEW_NOTIFICATIONS}, получен {msg.key().decode('utf-8')}")
 
             # Если оба сообщения получены, выходим из цикла
             if data_kafka_new_sending and data_kafka_new_processing:
@@ -74,14 +75,15 @@ async def test_success(processing_id, resume, min_score, max_score, clearing_kaf
         assert result_redis
 
     # Проверка данных в Kafka
-    # Проверяем сообщение из топика KAFKA_TOPIC_FOR_SENDING
-    assert data_kafka_new_sending is not None, "Не получено сообщение из топика KAFKA_TOPIC_FOR_SENDING"
+    # Проверяем сообщение из топика KAFKA_TOPIC_FOR_NOTIFICATIONS
+    assert data_kafka_new_sending is not None, "Не получено сообщение из топика KAFKA_TOPIC_FOR_NOTIFICATIONS"
     assert data_kafka_new_sending['success'] is True, "Обработка AI завершилась с ошибкой"
     assert isinstance(data_kafka_new_sending['response'], dict), "Ответ AI должен быть словарем"
 
     assert min_score <= data_kafka_new_sending['response']['score'] <= max_score  # проверка на соответствие баллов
 
     response = data_kafka_new_sending['response']
+    assert response['callback_url'] == 'https://test_url/', "Неверный callback_url" # В данных для бд его не надо сравнивать
     assert response['processing_id'] == processing_id, "Неверный processing_id"
     assert response['user_id'] == 2, "Неверный user_id"
     assert response['resume_id'] == 3, "Неверный resume_id"

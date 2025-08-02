@@ -17,7 +17,7 @@ MIN_COMMIT_COUNT_KAFKA = 10
 KEY_NEW_REQUEST = 'new_request'
 
 # данные для ключей Kafka (PRODUCER)
-KEY_NEW_SENDING = 'new_sending'
+KEY_NEW_NOTIFICATIONS = 'new_notifications'
 KEY_NEW_PROCESSING= 'new_processing'
 
 STORAGE_TIME_PROCESSED_MESSAGES = timedelta(days=3) # время хранения обработанного сообщения

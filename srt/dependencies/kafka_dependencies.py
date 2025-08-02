@@ -8,7 +8,7 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import sys
 
-from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_SENDING, \
+from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_NOTIFICATIONS, \
     STORAGE_TIME_PROCESSED_MESSAGES
 from srt.ai_handler import run_ai_handler
 from srt.dependencies.redis_dependencies import RedisWrapper
@@ -17,7 +17,7 @@ load_dotenv()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
 KAFKA_TOPIC_FOR_AI_HANDLER = os.getenv('KAFKA_TOPIC_FOR_AI_HANDLER')
 KAFKA_TOPIC_FOR_UPLOADING_DATA = os.getenv('KAFKA_TOPIC_FOR_UPLOADING_DATA')
-KAFKA_TOPIC_FOR_SENDING = os.getenv('KAFKA_TOPIC_FOR_SENDING')
+KAFKA_TOPIC_FOR_NOTIFICATIONS = os.getenv('KAFKA_TOPIC_FOR_NOTIFICATIONS')
 
 admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})\
 
@@ -118,6 +118,9 @@ class ConsumerKafka:
     async def worker_topic(self, data:dict, key: str):
         pass
 
+    async def error_handler(self, e):
+        logger.error(f'Произошла ошибка при обработки сообщения c kafka: {str(e)}')
+
     async def _run_consumer(self):
         self.consumer.subscribe([self.topic])
         msg_count = 0
@@ -137,7 +140,10 @@ class ConsumerKafka:
                 data = json.loads(msg.value().decode('utf-8'))
                 key = msg.key().decode('utf-8')
 
-                await self.worker_topic(data, key)
+                try:
+                    await self.worker_topic(data, key)
+                except Exception as e:
+                    await self.error_handler(e)
 
                 msg_count += 1
                 if msg_count % MIN_COMMIT_COUNT_KAFKA == 0:
@@ -170,6 +176,7 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
 
                 response_ai = await run_ai_handler(data['requirements'], data['resume'])
                 response_ai['response'].update({
+                    "callback_url": data['callback_url'],
                     "processing_id": data['processing_id'],
                     "user_id": data['user_id'],
                     "requirements_id": data['requirements_id'],
@@ -179,11 +186,12 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
                 await redis.setex(f'processed_messages:{data['processing_id']}', STORAGE_TIME_PROCESSED_MESSAGES, '_')
 
                 producer.sent_message(
-                    topic=KAFKA_TOPIC_FOR_SENDING,
-                    key=KEY_NEW_SENDING,
+                    topic=KAFKA_TOPIC_FOR_NOTIFICATIONS,
+                    key=KEY_NEW_NOTIFICATIONS,
                     value=response_ai
                 )
                 if response_ai['success']: # если запрос успешно обработан
+                    del response_ai['response']['callback_url'] # удаляем т.к. это не должно быть в БД
                     producer.sent_message(
                         topic=KAFKA_TOPIC_FOR_UPLOADING_DATA,
                         key=KEY_NEW_PROCESSING,
