@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from openai import error as openai_error
 
-from srt.config import GPT_MODEL, RPM, RPD, TPM, logger
+from src.config import GPT_MODEL, RPM, RPD, TPM, logger
 
 load_dotenv()
 OPENAI_KEY = os.getenv('OPENAI_KEY')

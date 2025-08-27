@@ -4,9 +4,9 @@ import pytest
 
 from confluent_kafka import KafkaError
 
-from srt.config import KEY_NEW_NOTIFICATIONS, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
-from srt.dependencies.kafka_dependencies import producer
-from srt.dependencies.redis_dependencies import RedisWrapper
+from src.config import KEY_NEW_NOTIFICATIONS, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
+from src.dependencies.kafka_dependencies import producer
+from src.dependencies.redis_dependencies import RedisWrapper
 from tests.conftest import (
     consumer, KAFKA_TOPIC_FOR_UPLOADING_DATA, KAFKA_TOPIC_FOR_AI_HANDLER,
     KAFKA_TOPIC_FOR_NOTIFICATIONS, RESUME_BY_20_POINT,

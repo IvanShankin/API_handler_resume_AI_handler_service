@@ -5,7 +5,7 @@ import time
 from redis import Redis
 from dotenv import load_dotenv
 
-from srt.dependencies.redis_dependencies import RedisWrapper
+from src.dependencies.redis_dependencies import RedisWrapper
 
 load_dotenv()  # Загружает переменные из .env
 KAFKA_BOOTSTRAP_SERVERS=os.getenv('KAFKA_BOOTSTRAP_SERVERS')
@@ -18,8 +18,8 @@ import pytest_asyncio
 from confluent_kafka.cimpl import NewTopic, TopicPartition
 from confluent_kafka import Consumer
 
-from srt.config import logger
-from srt.dependencies.kafka_dependencies import admin_client, consumer_ai_handler
+from src.config import logger
+from src.dependencies.kafka_dependencies import admin_client, consumer_ai_handler
 
 REQUIREMENTS ="""
 Должность: Middle Python Backend Developer

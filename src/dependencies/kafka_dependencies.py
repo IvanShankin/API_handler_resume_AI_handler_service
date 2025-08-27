@@ -8,10 +8,10 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import sys
 
-from srt.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_NOTIFICATIONS, \
+from src.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_NOTIFICATIONS, \
     STORAGE_TIME_PROCESSED_MESSAGES
-from srt.ai_handler import run_ai_handler
-from srt.dependencies.redis_dependencies import RedisWrapper
+from src.ai_handler import run_ai_handler
+from src.dependencies.redis_dependencies import RedisWrapper
 
 load_dotenv()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
