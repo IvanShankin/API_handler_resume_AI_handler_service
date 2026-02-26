@@ -1,16 +1,24 @@
 import os
 import json
-import openai
+from openai import AsyncOpenAI
 import tiktoken
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from openai import error as openai_error
+from openai import PermissionDeniedError, RateLimitError
 
-from src.config import GPT_MODEL, RPM, RPD, TPM, logger
+from src.config import GPT_MODEL, RPM, RPD, TPM, logger, RESPONSE_FORMAT
+from src.models import AiResponse
 
 load_dotenv()
-OPENAI_KEY = os.getenv('OPENAI_KEY')
-openai.api_key = OPENAI_KEY # загрузка ключа
+YANDEX_CLOUD_API_KEY = os.getenv('YANDEX_CLOUD_API_KEY')
+YANDEX_CLOUD_FOLDER_ID = os.getenv('YANDEX_CLOUD_FOLDER_ID')
+
+client = AsyncOpenAI(
+    api_key=YANDEX_CLOUD_API_KEY,
+    base_url="https://ai.api.cloud.yandex.net/v1",
+    project=YANDEX_CLOUD_FOLDER_ID,
+)
+
 
 # Глобальные счетчики и временные метки
 request_counter_minute = 0 # счётчик запросов в минуту
@@ -92,22 +100,7 @@ async def check_limits(prompt: str) -> dict:
 
     return {'result': True, 'message': 'no restrictions', 'wait_seconds': 0 }
 
-async def run_ai_handler(requirements: str, resume: str)-> dict:
-    """
-    :param requirements:
-    :param resume:
-    :return: dict{
-        "success": bool,
-        "response": dict{
-            'score': int, # X/100 совместимость с требованиями
-            'matches': list, # перечисление навыков
-            'recommendation': str, # рекомендации по найму
-            'verdict': str, # заключение "Подходит" или "Не подходит"
-        },
-        "message_error": str, # опционально, если 'success' == False
-        "wait_seconds": int, # опционально, если есть rate limit
-    }
-    """
+async def run_ai_handler(requirements: str, resume: str) -> AiResponse:
     global current_tokens_minute
     prompt = """
 Ты — AI-рекрутер. Твоя задача — строго и объективно оценить соответствие кандидата требованиям вакансии.
@@ -126,7 +119,17 @@ async def run_ai_handler(requirements: str, resume: str)-> dict:
 5. Сформулируй краткую рекомендацию по найму (1–2 предложения).
 6. Дай финальный вердикт: "Подходит" или "Не подходит".
 
-Выводи результат СТРОГО В ФОРМАТЕ JSON, без пояснений, без лишнего текста. Пример:
+Выводи результат СТРОГО В ФОРМАТЕ JSON, без пояснений, без лишнего текста. 
+
+Формат:
+{
+  "score": <число>,
+  "verdict": <строка>,
+  "recommendation": <строка>,
+  "matches": [<список строк>]
+}
+
+Пример:
 
 {
   "score": 35,
@@ -137,59 +140,57 @@ async def run_ai_handler(requirements: str, resume: str)-> dict:
 
 ---
 
-""" + f'Требования к вакансии: {requirements} \nКандидат:{resume}'
+""" + f"Требования к вакансии: {requirements} \nКандидат:{resume}"
 
     limit = await check_limits(prompt)
-
-    if not limit['result']: # если превышен лимит
-        return {
-            "success": False,
-            "response": None,
-            "message_error": limit['message'],
-            "wait_seconds": limit['wait_seconds'],
-        }
+    if not limit['result']: # если привышен лимит
+        return AiResponse(
+            success=False,
+            message_error=limit['message'],
+            wait_seconds=limit['wait_seconds'],
+        )
 
     try:
-        response = openai.ChatCompletion.create(
+        logger.info("Начата обработка запроса")
+        # Новый современный метод
+        response = await client.responses.create(
             model=GPT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0  # строгий, стабильный ответ
+            input=prompt,
+            temperature=0
         )
-    except openai_error.PermissionError:
-        logger.error('Сервер не должен отправлять запросы к GPT с Российского IP!')
-        return {
-            "success": False,
-            "response": None,
-            "message_error": 'Сервер не должен отправлять запросы к GPT с Российского IP!',
-            "wait_seconds": None,
-        }
-    except openai_error.RateLimitError as e:
-        logger.warning('Получили rate limit как ошибку!') # логируем т.к. сюда не должны попадать
-        return {
-            "success": False,
-            "response": None,
-            "message_error": 'Пожалуйста подождите 20 секунд',
-            "wait_seconds": 20, # в ошибке всегда просят подождать 20 секунд
-        }
+        logger.info("Обработка завершена без ошибок")
+    except PermissionDeniedError:
+        logger.exception('Сервер не должен отправлять запросы к GPT с Российского IP!')
+        return AiResponse(
+            success=False,
+            message_error='Сервер не должен отправлять запросы к GPT с Российского IP!',
+            wait_seconds=None,
+        )
+    except RateLimitError as e:
+        logger.error(f'Получили rate limit как ошибку!. {str(e)}')
+        return AiResponse(
+            success=False,
+            message_error='Пожалуйста подождите 20 секунд',
+            wait_seconds=None,
+        )
     except Exception as e:
-        logger.error(f'Неожиданная ошибка при запросе к OpenAI: {str(e)}')  # логируем
-        return {
-            "success": False,
-            "response": None,
-            "message_error": 'Произошла внутренняя ошибка',
-            "wait_seconds": None,
-        }
+        logger.exception(f'Неожиданная ошибка при запросе к OpenAI: {str(e)}')
+        return AiResponse(
+            success=False,
+            message_error='Произошла внутренняя ошибка',
+            wait_seconds=None,
+        )
 
-    current_tokens_minute += len(response['choices'][0]['message']['content'])
+    content = response.output_text
+    logger.info(f"response AI: {content}")
+    current_tokens_minute += len(content)
 
-    # очищаем ответ от маркеров ```json
-    cleaned_response = response['choices'][0]['message']['content'].replace('```json', '').replace('```', '').strip()
-
+    cleaned_response = content.replace('```json', '').replace('```', '').strip()
     response_json = json.loads(cleaned_response)
 
-    return {
-        "success": True,
-        "response": response_json,
-        "message_error": None,
-        "wait_seconds": None,
-    }
+    return AiResponse(
+        success=True,
+        response=response_json,
+        message_error=None,
+        wait_seconds=None,
+    )

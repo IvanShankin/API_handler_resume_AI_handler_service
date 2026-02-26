@@ -4,7 +4,7 @@ import pytest
 
 from confluent_kafka import KafkaError
 
-from src.config import KEY_NEW_NOTIFICATIONS, KEY_NEW_PROCESSING, KEY_NEW_REQUEST
+from src.config import KEY_NEW_NOTIFICATIONS, KEY_END_PROCESSING, KEY_NEW_REQUEST
 from src.dependencies.kafka_dependencies import producer
 from src.dependencies.redis_dependencies import RedisWrapper
 from tests.conftest import (
@@ -59,10 +59,10 @@ async def test_success(processing_id, resume, min_score, max_score, clearing_kaf
                 continue
             if msg.key().decode('utf-8') == KEY_NEW_NOTIFICATIONS:
                 data_kafka_new_sending = json.loads(msg.value().decode('utf-8'))
-            elif msg.key().decode('utf-8') == KEY_NEW_PROCESSING:
+            elif msg.key().decode('utf-8') == KEY_END_PROCESSING:
                 data_kafka_new_processing = json.loads(msg.value().decode('utf-8'))
             else:
-                raise Exception(f"Ожидался ключ {KEY_NEW_PROCESSING} или {KEY_NEW_NOTIFICATIONS}, получен {msg.key().decode('utf-8')}")
+                raise Exception(f"Ожидался ключ {KEY_END_PROCESSING} или {KEY_NEW_NOTIFICATIONS}, получен {msg.key().decode('utf-8')}")
 
             # Если оба сообщения получены, выходим из цикла
             if data_kafka_new_sending and data_kafka_new_processing:

@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
-GPT_MODEL = 'gpt-4.1-mini-2025-04-14'
+GPT_MODEL = 'gpt://b1g7oqla4ilph9u5f603/yandexgpt-lite/latest'
 
 # ограничение по запросам
 RPM = 3 # в минуту
@@ -18,7 +18,7 @@ KEY_NEW_REQUEST = 'new_request'
 
 # данные для ключей Kafka (PRODUCER)
 KEY_NEW_NOTIFICATIONS = 'new_notifications'
-KEY_NEW_PROCESSING= 'new_processing'
+KEY_END_PROCESSING= 'end_processing'
 
 STORAGE_TIME_PROCESSED_MESSAGES = timedelta(days=3) # время хранения обработанного сообщения
 
@@ -35,3 +35,21 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+RESPONSE_FORMAT={
+    "type": "json_schema",
+    "json_schema": {
+        "properties": {
+            "score": {"type": "integer"},
+            "verdict": {"type": "string"},
+            "recommendation": {"type": "string"},
+            "matches": {
+                "type": "array",
+                "items": {"type": "string"}
+            }
+        },
+        "required": ["score", "verdict", "recommendation", "matches"],
+        "type": "object"
+    },
+    "strict": True
+}

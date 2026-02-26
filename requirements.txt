@@ -18,7 +18,7 @@ idna==3.10
 iniconfig==2.1.0
 jiter==0.10.0
 multidict==6.6.3
-openai==0.28.0
+openai==2.17.0
 packaging==25.0
 pluggy==1.6.0
 propcache==0.3.2

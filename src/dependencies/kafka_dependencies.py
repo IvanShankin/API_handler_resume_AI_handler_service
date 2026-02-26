@@ -8,7 +8,7 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from confluent_kafka import Consumer, KafkaException, KafkaError
 import sys
 
-from src.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_NEW_PROCESSING, KEY_NEW_NOTIFICATIONS, \
+from src.config import logger, MIN_COMMIT_COUNT_KAFKA, KEY_NEW_REQUEST, KEY_END_PROCESSING, KEY_NEW_NOTIFICATIONS, \
     STORAGE_TIME_PROCESSED_MESSAGES
 from src.ai_handler import run_ai_handler
 from src.dependencies.redis_dependencies import RedisWrapper
@@ -164,41 +164,46 @@ class ConsumerKafkaAIHandler(ConsumerKafka):
         super().__init__(topic)
 
     async def worker_topic(self, data: dict, key: str):
-        if key == KEY_NEW_REQUEST: # при поступлении нового запроса
-            async with RedisWrapper() as redis:
-                redis_result = await redis.get(f'processed_messages:{data['processing_id']}')
-                if redis_result is not None:
-                    logger.info(f"Сообщение от kafka на обработку с processing_id = {data['processing_id']} будет пропущено,"
-                                f"т.к. Было ранее обработано")
-                    # в этом случае ничего возвращать не надо, ибо уже обработали этот запрос
-                    return
+        try:
+            if key == KEY_NEW_REQUEST: # при поступлении нового запроса
+                async with RedisWrapper() as redis:
+                    redis_result = await redis.get(f'processed_messages:{data['processing_id']}')
+                    if redis_result is not None:
+                        logger.info(f"Сообщение от kafka на обработку с processing_id = {data['processing_id']} будет пропущено,"
+                                    f"т.к. Было ранее обработано")
+                        # в этом случае ничего возвращать не надо, ибо уже обработали этот запрос
+                        return
 
 
-                response_ai = await run_ai_handler(data['requirements'], data['resume'])
-                response_ai['response'].update({
-                    "callback_url": data['callback_url'],
-                    "processing_id": data['processing_id'],
-                    "user_id": data['user_id'],
-                    "requirements_id": data['requirements_id'],
-                    "resume_id": data['resume_id']
-                })
-                # сохраняем в redis (значение может быть любое)
-                await redis.setex(f'processed_messages:{data['processing_id']}', STORAGE_TIME_PROCESSED_MESSAGES, '_')
+                    response_ai = await run_ai_handler(data['requirements'], data['resume'])
 
-                producer.sent_message(
-                    topic=KAFKA_TOPIC_FOR_NOTIFICATIONS,
-                    key=KEY_NEW_NOTIFICATIONS,
-                    value=response_ai
-                )
-                if response_ai['success']: # если запрос успешно обработан
-                    del response_ai['response']['callback_url'] # удаляем т.к. это не должно быть в БД
+                    response_ai.response.update({
+                        "callback_url": data['callback_url'],
+                        "processing_id": data['processing_id'],
+                        "user_id": data['user_id'],
+                        "requirements_id": data['requirements_id'],
+                        "resume_id": data['resume_id']
+                    })
+                    # сохраняем в redis (значение может быть любое)
+                    await redis.setex(f'processed_messages:{data['processing_id']}', STORAGE_TIME_PROCESSED_MESSAGES, '_')
+
+                    producer.sent_message(
+                        topic=KAFKA_TOPIC_FOR_NOTIFICATIONS,
+                        key=KEY_NEW_NOTIFICATIONS,
+                        value=response_ai.model_dump()
+                    )
+
+                    del response_ai.response['callback_url'] # удаляем т.к. это не должно быть в БД
                     producer.sent_message(
                         topic=KAFKA_TOPIC_FOR_UPLOADING_DATA,
-                        key=KEY_NEW_PROCESSING,
-                        value=response_ai['response']
+                        key=KEY_END_PROCESSING,
+                        value=response_ai.model_dump()
                     )
-                else:
-                    logger.info(f'Обработка {data['processing_id']} завершилась с ошибкой и данные не будут направленны через топик KAFKA_TOPIC_FOR_UPLOADING_DATA')
+
+                    if not response_ai.success:
+                        logger.info(f'Обработка #{data['processing_id']} завершилась с ошибкой')
+        except Exception:
+            logger.exception("Ошибка при обработки в топике")
 
 
 producer = ProducerKafka()
