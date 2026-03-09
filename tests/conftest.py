@@ -21,7 +21,8 @@ async def start_test():
 
     await set_redis(fakeredis.aioredis.FakeRedis())
     set_admin_client(FakeAdminClient())
-    await init_producer()
+
+    await set_producer(KafkaTestProducer())
     init_container()
     await check_exists_topic(conf.env.topic_uploading_data)
 
