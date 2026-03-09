@@ -4,7 +4,7 @@ import pytest
 
 from confluent_kafka import KafkaError
 
-from src.config import KEY_NEW_NOTIFICATIONS, KEY_END_PROCESSING, KEY_NEW_REQUEST
+from src.service.config import KEY_NEW_NOTIFICATIONS, KEY_END_PROCESSING, KEY_NEW_REQUEST
 from src.dependencies.kafka_dependencies import producer
 from src.dependencies.redis_dependencies import RedisWrapper
 from tests.conftest import (

@@ -1,0 +1,33 @@
+from contextlib import asynccontextmanager
+
+from src.container import init_container
+from src.infrastructure.kafka.admin_client import init_admin_client, shutdown_admin_client
+from src.infrastructure.kafka.consumers.run_consumers import run_consumer_by_uploading_topic
+from src.infrastructure.kafka.topic_manager import check_exists_topic
+from src.infrastructure.redis import init_redis, close_redis
+from src.service.config import init_config
+
+
+@asynccontextmanager
+async def start_app():
+    """
+    Асинхронный контекстный менеджер для запуска приложения.
+    Инициализирует конфиг, Redis, Kafka, проверяет топик и запускает потребителя.
+    """
+    conf = init_config()
+    await init_redis()
+    init_container()
+    await init_admin_client()
+    await check_exists_topic(conf.env.topic_uploading_data)
+
+    consumer_runner = await run_consumer_by_uploading_topic()
+
+    try:
+        # Всё готово, отдаём управление вызывающему
+        yield
+    finally:
+        # Корректное завершение всех сервисов
+        await consumer_runner.stop()
+        await close_redis()
+        await shutdown_admin_client()
+
