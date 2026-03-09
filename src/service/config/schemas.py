@@ -2,7 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from src.service.config.base import init_env
 
@@ -16,8 +16,8 @@ class Config:
         self.ai_model: str = "gpt://b1g7oqla4ilph9u5f603/yandexgpt-lite/latest"
 
         # ограничение по запросам
-        self.rpm = 3  # в минуту
-        self.rpd = 200  # в день
+        self.rpm = 15  # в минуту
+        self.rpd = 500  # в день
 
         # Ограничение токенов (символов). Это действует на входящий и выходящий запрос
         self.tpm = 40000  # в минуту

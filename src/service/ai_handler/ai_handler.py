@@ -29,7 +29,7 @@ class AiHandlerService:
         prompt = self.conf.prompt + f"Требования к вакансии: {requirements} \nКандидат:{resume}"
 
         limit = await self.limits.check_limits(prompt)
-        if not limit.result:  # если привышен лимит
+        if not limit.result:  # если превышен лимит
             return AIHandlerResult(
                 success=False,
                 response=None,
@@ -71,7 +71,6 @@ class AiHandlerService:
             )
 
         content = response.output_text
-        self.logger.info(f"response AI: {content}")
         self.limits.add_token_minutes(limit.prompt_tokens)
 
         cleaned_response = content.replace('```json', '').replace('```', '').strip()
@@ -103,7 +102,6 @@ class AiHandlerService:
                 verdict=response_ai.response.verdict,
             )
         )
-        
 
 
 

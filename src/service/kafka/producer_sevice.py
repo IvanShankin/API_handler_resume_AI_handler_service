@@ -20,6 +20,6 @@ class KafkaProducerService:
     async def send_end_processing(self, data: EndProcessing) -> None:
         await self.producer.send_message(
             topic=self.conf.env.topic_uploading_data,
-            key=self.conf.kafka_keys.new_processing,
+            key=self.conf.kafka_keys.end_processing,
             value=data.model_dump()
         )

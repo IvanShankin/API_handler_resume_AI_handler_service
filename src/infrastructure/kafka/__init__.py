@@ -25,7 +25,7 @@ async def set_producer(producer: ProducerKafka) -> ProducerKafka:
     return _producer
 
 
-async def get_producer() -> ProducerKafka:
+def get_producer() -> ProducerKafka:
     global _producer
     if _producer is None:
         raise RuntimeError("ProducerKafka not initialized")

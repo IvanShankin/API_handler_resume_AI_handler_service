@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from src.container import init_container
+from src.infrastructure.kafka import init_producer
 from src.infrastructure.kafka.admin_client import init_admin_client, shutdown_admin_client
 from src.infrastructure.kafka.consumers.run_consumers import run_consumer_by_uploading_topic
 from src.infrastructure.kafka.topic_manager import check_exists_topic
@@ -16,9 +17,10 @@ async def start_app():
     """
     conf = init_config()
     await init_redis()
-    init_container()
     await init_admin_client()
+    init_container()
     await check_exists_topic(conf.env.topic_uploading_data)
+    await init_producer()
 
     consumer_runner = await run_consumer_by_uploading_topic()
 
