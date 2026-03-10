@@ -24,7 +24,7 @@ async def start_test():
 
     await set_producer(KafkaTestProducer())
     init_container()
-    await check_exists_topic(conf.env.topic_uploading_data)
+    await check_exists_topic([conf.kafka_topics.new_request, conf.kafka_topics.finished])
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)

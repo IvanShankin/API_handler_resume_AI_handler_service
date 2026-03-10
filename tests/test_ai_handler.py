@@ -21,7 +21,7 @@ async def test_new_processing(replace_producer, replace_ai_model, monkeypatch):
             resume="Тестовое резюме",
             requirement="Тестовые требования"
         ).model_dump(),
-        key=container.config.kafka_keys.new_request,
+        topic=container.config.kafka_topics.new_request,
     ))
 
     assert replace_producer.all_message

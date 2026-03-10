@@ -1,5 +1,5 @@
 import json
-from typing import Optional, List
+from typing import Optional, List, Any
 from unittest.mock import Mock
 
 from orjson import orjson
@@ -16,7 +16,7 @@ class FakeAdminClient:
 
     async def list_topics(self):
         conf = get_config()
-        return [conf.env.topic_uploading_data]
+        return [conf.kafka_topics.new_request, conf.kafka_topics.finished]
 
 
 class KafkaTestProducer(ProducerKafka):
@@ -33,8 +33,8 @@ class KafkaTestProducer(ProducerKafka):
     async def send_message(
         self,
         topic: str,
-        key: str,
-        value: dict | str | bytes
+        value: dict | str | bytes,
+        key: Any = None,
     ):
         """Сохранит все """
         self.all_message.append(

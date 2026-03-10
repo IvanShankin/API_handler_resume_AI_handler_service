@@ -90,7 +90,7 @@ class AiHandlerService:
             requirements=processing_data.requirement
         )
 
-        await self.producer.send_end_processing(
+        await self.producer.send_finish_processing(
             data=EndProcessing(
                 processing_id=processing_data.processing_id,
                 success=response_ai.success,

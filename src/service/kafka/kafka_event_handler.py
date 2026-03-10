@@ -22,17 +22,17 @@ class KafkaEventHandlerService:
         self.logger = logger
         self.conf = config
 
+        # Обработчики для каждого топика
+        self.handlers = {
+            self.conf.kafka_topics.new_request: self._new_request,
+        }
+
     def _get_message_uid(self, msg) -> str:
         return f"{msg.topic}:{msg.partition}:{msg.offset}"
 
-    async def _handler_by_key(self, data: dict, key: str, message_id: str):
-
-        if key == self.conf.kafka_keys.new_request:
-            new_user_request = NewProcessing(**data)
-            await self.ai_handler.start_processing(new_user_request)
-
-        # записываем что сообщение обработано
-        await self.kafka_message_cache.set(message_id)
+    async def _new_request(self, data: dict):
+        new_user_request = NewProcessing(**data)
+        await self.ai_handler.start_processing(new_user_request)
 
     async def handler_messages(self, msg):
         """
@@ -51,7 +51,14 @@ class KafkaEventHandlerService:
         )
 
         try:
-            await self._handler_by_key(data, key, message_id)
+            handler = self.handlers.get(msg.topic)
+            if handler:
+                await handler(data)
+            else:
+                self.logger.warning(f"Не нашли топик из config для сообщения. Топик: {msg.topic}")
+
+            # записываем что сообщение обработано
+            await self.kafka_message_cache.set(message_id)
         except Exception:
             self.logger.exception(
                 f"Обработка сообщения из kafka завершилась с ошибкой. Данные о сообщении: \n"

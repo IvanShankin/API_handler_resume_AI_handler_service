@@ -1,6 +1,8 @@
 import json
 import socket
 from logging import Logger
+from typing import Any
+
 from aiokafka import AIOKafkaProducer
 
 from src.service.config.schemas import Config
@@ -44,8 +46,8 @@ class ProducerKafka:
     async def send_message(
         self,
         topic: str,
-        key: str,
-        value: dict | str | bytes
+        value: dict | str | bytes,
+        key: Any = None,
     ):
         try:
             if isinstance(value, dict):

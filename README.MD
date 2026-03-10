@@ -20,8 +20,6 @@
 - **OpenAI API** - анализ резюме
 - **Pytest** - тестирование
 
-## Запуск сервиса
-
 ### Требования
 - Docker и Docker Compose
 - Python 3.10+

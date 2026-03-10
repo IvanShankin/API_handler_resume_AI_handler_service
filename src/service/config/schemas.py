@@ -81,7 +81,7 @@ class Config:
 
         self.env = EnvConfig.build()
         self.paths = PathsConfig.build()
-        self.kafka_keys = KafkaKeys.build()
+        self.kafka_topics = KafkaTopics.build()
         self.lifespan_redis = LifespanInRedis.build()
 
 
@@ -91,8 +91,6 @@ class EnvConfig(BaseModel):
     yandex_cloud_folder_id: str
 
     kafka_bootstrap_servers: str
-    topic_uploading_data: str
-    topic_ai_handler: str
 
     redis_host: str
     redis_port: int
@@ -106,8 +104,6 @@ class EnvConfig(BaseModel):
             yandex_cloud_folder_id=os.environ['YANDEX_CLOUD_FOLDER_ID'],
 
             kafka_bootstrap_servers=os.environ['KAFKA_BOOTSTRAP_SERVERS'],
-            topic_uploading_data=os.environ['TOPIC_UPLOADING_DATA'],
-            topic_ai_handler=os.environ['TOPIC_AI_HANDLER'],
 
             redis_host=os.environ['REDIS_HOST'],
             redis_port=int(os.environ['REDIS_PORT']),
@@ -140,15 +136,15 @@ class PathsConfig(BaseModel):
         )
 
 
-class KafkaKeys(BaseModel):
+class KafkaTopics(BaseModel):
     new_request: str
-    end_processing: str
+    finished: str
 
     @classmethod
-    def build(cls) -> "KafkaKeys":
+    def build(cls) -> "KafkaTopics":
         return cls(
-            new_request='new_request',
-            end_processing='end_processing',
+            new_request='processing.requested',
+            finished='processing.finished',
         )
 
 

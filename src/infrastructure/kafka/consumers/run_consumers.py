@@ -34,11 +34,11 @@ class ConsumerRunner:
         await self._task
 
 
-async def run_consumer_by_uploading_topic() -> ConsumerRunner:
+async def run_consumer() -> ConsumerRunner:
     container = get_container()
 
     consumer = ConsumerKafka(
-        topic=container.config.env.topic_uploading_data,
+        topics=[container.config.kafka_topics.new_request],
         handler_msg_cls=container.kafka_event_handler_service,
         logger=container.logger,
         config=container.config

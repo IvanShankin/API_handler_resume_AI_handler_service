@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from src.container import init_container
 from src.infrastructure.kafka import init_producer
 from src.infrastructure.kafka.admin_client import init_admin_client, shutdown_admin_client
-from src.infrastructure.kafka.consumers.run_consumers import run_consumer_by_uploading_topic
+from src.infrastructure.kafka.consumers.run_consumers import run_consumer
 from src.infrastructure.kafka.topic_manager import check_exists_topic
 from src.infrastructure.redis import init_redis, close_redis
 from src.service.config import init_config
@@ -18,11 +18,11 @@ async def start_app():
     conf = init_config()
     await init_redis()
     await init_admin_client()
-    init_container()
-    await check_exists_topic(conf.env.topic_uploading_data)
     await init_producer()
+    init_container()
+    await check_exists_topic([conf.kafka_topics.new_request, conf.kafka_topics.finished])
 
-    consumer_runner = await run_consumer_by_uploading_topic()
+    consumer_runner = await run_consumer()
 
     try:
         # Всё готово, отдаём управление вызывающему
