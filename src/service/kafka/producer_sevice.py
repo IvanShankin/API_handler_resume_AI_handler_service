@@ -18,6 +18,7 @@ class KafkaProducerService:
         self.producer = producer
 
     async def send_finish_processing(self, data: EndProcessing) -> None:
+        self.logger.info(f"Отправлено сообщение в kafka о конце обработки")
         await self.producer.send_message(
             topic=self.conf.kafka_topics.finished,
             value=data.model_dump()

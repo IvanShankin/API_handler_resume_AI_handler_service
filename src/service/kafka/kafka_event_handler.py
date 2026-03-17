@@ -39,8 +39,10 @@ class KafkaEventHandlerService:
         :return: Успех обработки. Если уже было обработанно ранее, то вернёт False
         """
         message_id = self._get_message_uid(msg)
+        self.logger.info(f"Получено новое сообщение от kafka: '{message_id}'")
 
         if await self.kafka_message_cache.get(message_id):
+            self.logger.info(f"Сообщение: '{message_id}'  будет пропущено, т.к. обработалось ранее")
             return
 
         data = orjson.loads(msg.value.decode("utf-8"))

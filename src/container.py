@@ -1,6 +1,6 @@
 from typing import Optional
 
-from src.infrastructure.kafka import ProducerKafka, get_producer
+from src.infrastructure.kafka import get_producer
 from src.infrastructure.redis import get_redis
 from src.repository.redis.kafka_message_cache import KafkaMessageCacheRepository
 from src.service.ai_handler.ai_handler import AiHandlerService
@@ -8,7 +8,7 @@ from src.service.ai_handler.limits import get_limits, LimitAiRequest
 from src.service.config import get_config
 from src.service.kafka.kafka_event_handler import KafkaEventHandlerService
 from src.service.kafka.producer_sevice import KafkaProducerService
-from src.service.utils.logger import get_logger
+from src.service.utils.logger import get_logger, setup_logging
 
 
 class Container:
@@ -16,6 +16,7 @@ class Container:
     def __init__(self):
 
         self.config = get_config()
+        setup_logging(self.config.paths.log_file)
         self.logger = get_logger()
         self.session_redis = get_redis()
         self.producer_infra = get_producer()
